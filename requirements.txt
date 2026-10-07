@@ -1,0 +1,15 @@
+# Versiones con las que se desarrolló, entrenó y verificó el proyecto (Python 3.11).
+# Funciona con Python 3.10 - 3.12.
+pandapower==3.5.5
+lightsim2grid==1.1.0
+gymnasium==1.3.0
+stable-baselines3==2.9.0
+torch>=2.3
+optuna==5.0.0
+flask>=3.0
+numpy>=2.0
+pandas>=2.2
+scipy>=1.13
+matplotlib>=3.8
+networkx>=3.2
+numba>=0.60      # opcional: acelera pp.runpp / pp.runopp de pandapower
