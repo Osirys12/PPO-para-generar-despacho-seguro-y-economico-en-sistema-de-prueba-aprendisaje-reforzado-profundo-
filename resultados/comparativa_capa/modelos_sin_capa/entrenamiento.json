@@ -1,0 +1,48 @@
+{
+  "pasos_por_semilla": 3000000,
+  "minutos_totales": 62.4,
+  "origen_hiperparametros": "Optuna",
+  "hiperparametros": {
+    "learning_rate": 0.0009104607590743016,
+    "esquema_lr": "lineal",
+    "n_steps": 64,
+    "batch_size": 256,
+    "n_epochs": 10,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 7.33681554564786e-07,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "arquitectura": "grande",
+    "activacion": "relu",
+    "log_std_init": -1.4864329351490566
+  },
+  "semilla_elegida": 42,
+  "por_semilla": [
+    {
+      "semilla": 7,
+      "minutos": 62.1,
+      "mejor_validacion": {
+        "recompensa_media": 1.631030955644623,
+        "pct_seguro_real": 93.0,
+        "pct_seguro_margen": 89.0,
+        "sobrecosto_medio": 0.09833973543439613,
+        "pct_convergencia": 100.0,
+        "paso": 3000320
+      }
+    },
+    {
+      "semilla": 42,
+      "minutos": 61.9,
+      "mejor_validacion": {
+        "recompensa_media": 1.7712744942062708,
+        "pct_seguro_real": 95.0,
+        "pct_seguro_margen": 92.33333333333333,
+        "sobrecosto_medio": 0.09565771772589948,
+        "pct_convergencia": 100.0,
+        "paso": 3000320
+      }
+    }
+  ]
+}
