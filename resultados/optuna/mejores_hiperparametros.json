@@ -1,0 +1,37 @@
+{
+  "trial": 6,
+  "recompensa_validacion": 1.5247094872969955,
+  "pct_seguro_real": 94.0,
+  "sobrecosto_medio": 0.11798236871248624,
+  "pasos_por_trial": 300000,
+  "trials_completos": 14,
+  "trials_podados": 17,
+  "hiperparametros": {
+    "learning_rate": 0.0009104607590743016,
+    "esquema_lr": "lineal",
+    "n_steps": 64,
+    "batch_size": 256,
+    "n_epochs": 10,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 7.33681554564786e-07,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "arquitectura": "grande",
+    "activacion": "relu",
+    "log_std_init": -1.4864329351490566
+  },
+  "importancias": {
+    "batch_size": 0.4113054535114677,
+    "ent_coef": 0.13983542432554305,
+    "log_std_init": 0.12275579022047238,
+    "learning_rate": 0.09496725032429558,
+    "n_steps": 0.07822856974602098,
+    "arquitectura": 0.06558608201529025,
+    "clip_range": 0.039524774717611025,
+    "n_epochs": 0.019919276423049512,
+    "activacion": 0.017729185846122434,
+    "esquema_lr": 0.010148192870127092
+  }
+}
