@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Despacho PPO</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<!-- Chart.js 4.4.1 (MIT): copia local para que el panel funcione sin internet;
+     si faltara, se carga desde el CDN. -->
+<script src="/static/chart.umd.min.js"></script>
+<script>window.Chart || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\/script>')</script>
+<style>
+  /* Paleta del panel FLEXIBILITY */
+  :root {
+    --bg:#080C18; --surface:#0D1224; --border:#1A2040; --border2:#242B4A;
+    --blue:#00B4D8; --green:#06D6A0; --orange:#FF9F1C; --red:#EF4444;
+    --violet:#A78BFA; --text:#E2E8F0; --muted:#64748B;
+    --mono:'JetBrains Mono',monospace; --sans:'Inter',sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); min-height:100vh; }
+
+  header { display:flex; align-items:center; justify-content:space-between; padding:14px 22px;
+           background:var(--surface); border-bottom:1px solid var(--border); }
+  .logo { display:flex; align-items:center; gap:12px; }
+  .logo-icon { width:34px; height:34px; border-radius:8px; display:grid; place-items:center;
+               background:linear-gradient(135deg,var(--blue),#0077A8); font-size:16px; }
+  .logo-text { font-size:15px; font-weight:600; letter-spacing:.06em; }
+  .logo-sub { font-size:11px; color:var(--muted); }
+  .header-right { display:flex; align-items:center; gap:14px; font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .status-dot { width:10px; height:10px; border-radius:50%; background:var(--muted); }
+  .status-dot.ok { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .status-dot.err { background:var(--red); box-shadow:0 0 8px var(--red); }
+
+  .error-bar { display:none; padding:10px 22px; background:rgba(239,68,68,.12); color:var(--red);
+               font-family:var(--mono); font-size:12px; border-bottom:1px solid rgba(239,68,68,.3); }
+
+  .kpi-bar { display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--border); }
+  .kpi { background:var(--surface); padding:14px 18px; }
+  .kpi-label { font-size:10px; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .kpi-value { font-family:var(--mono); font-size:24px; font-weight:700; margin-top:4px; }
+  .kpi-sub { font-size:11px; color:var(--muted); font-family:var(--mono); margin-top:2px; }
+
+  .layout { display:grid; grid-template-columns:300px 1fr; gap:1px; background:var(--border); }
+  aside { background:var(--surface); padding:18px; display:flex; flex-direction:column; gap:18px; }
+  .ctl-title { font-size:11px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+  .ctl-row { display:flex; justify-content:space-between; align-items:baseline; font-size:12px; margin-bottom:4px; }
+  .ctl-row .v { font-family:var(--mono); color:var(--blue); }
+  input[type=range] { width:100%; accent-color:var(--blue); margin-bottom:10px; }
+  .price-row input[type=range] { accent-color:var(--orange); }
+  .btn { width:100%; padding:9px 12px; border-radius:6px; border:1px solid rgba(0,180,216,.35);
+         background:rgba(0,180,216,.12); color:var(--blue); font-family:var(--sans); font-size:12px;
+         font-weight:500; cursor:pointer; transition:background .2s; }
+  .btn:hover { background:rgba(0,180,216,.22); }
+  .btn.orange { border-color:rgba(255,159,28,.35); background:rgba(255,159,28,.1); color:var(--orange); }
+  .btn.orange:hover { background:rgba(255,159,28,.2); }
+  .btn:disabled { opacity:.5; cursor:wait; }
+  .btn-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .toggle { display:flex; align-items:center; gap:10px; font-size:12px; cursor:pointer; margin-bottom:8px; user-select:none; }
+  .toggle input { accent-color:var(--green); width:15px; height:15px; }
+  .hint { font-size:11px; color:var(--muted); line-height:1.5; }
+  .perfil { font-family:var(--mono); font-size:11px; color:var(--violet); }
+
+  main { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:1px; background:var(--border); align-content:start; }
+  .panel { background:var(--surface); padding:16px 18px; min-width:0; }
+  .panel.wide { grid-column:1 / -1; }
+  .panel-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap; }
+  .panel-title { font-size:11px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; }
+  .panel-badge { font-family:var(--mono); font-size:10px; padding:3px 8px; border-radius:4px;
+                 background:rgba(0,180,216,.12); color:var(--blue); border:1px solid rgba(0,180,216,.2); max-width:100%; }
+  .chart-wrap { position:relative; height:250px; }
+  canvas#red { width:100%; height:300px; display:block; }
+
+  table.gen { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:11px; margin-top:12px; }
+  table.gen th { text-align:right; color:var(--muted); font-weight:500; padding:4px 6px; border-bottom:1px solid var(--border2); }
+  table.gen th:first-child, table.gen td:first-child { text-align:left; }
+  table.gen td { text-align:right; padding:4px 6px; border-bottom:1px solid var(--border); }
+  .good { color:var(--green); } .bad { color:var(--red); } .warn { color:var(--orange); }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:10px; font-family:var(--mono); color:var(--muted); margin-top:6px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+  #panelDia { display:none; }
+
+  @media (max-width: 1100px) {
+    .kpi-bar { grid-template-columns:repeat(3,1fr); }
+    .layout { grid-template-columns:1fr; }
+    main { grid-template-columns:1fr; }
+  }
+  @media (max-width: 560px) {
+    header { padding:12px 16px; }
+    .kpi-bar { grid-template-columns:repeat(2,1fr); }
+    aside, .panel { padding:14px 16px; }
+    .kpi-value { font-size:20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div>
+      <div class="logo-text">DESPACHO PPO</div>
+      <div class="logo-sub" id="subtitulo">Despacho económico seguro · pandapower</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="tiempoLbl">—</span>
+    <div class="status-dot" id="statusDot" title="Estado del agente"></div>
+  </div>
+</header>
+
+<div class="error-bar" id="errorBar"></div>
+
+<div class="kpi-bar">
+  <div class="kpi"><div class="kpi-label">Costo agente</div><div class="kpi-value" id="kCosto" style="color:var(--blue)">—</div><div class="kpi-sub">USD/h</div></div>
+  <div class="kpi"><div class="kpi-label">Brecha vs OPF</div><div class="kpi-value" id="kBrecha">—</div><div class="kpi-sub" id="kBrechaSub">active la comparación</div></div>
+  <div class="kpi"><div class="kpi-label">Demanda</div><div class="kpi-value" id="kDemanda" style="color:var(--orange)">—</div><div class="kpi-sub" id="kDemandaSub">MW</div></div>
+  <div class="kpi"><div class="kpi-label">Cargabilidad máx.</div><div class="kpi-value" id="kCarga">—</div><div class="kpi-sub" id="kCargaSub">rama más cargada</div></div>
+  <div class="kpi"><div class="kpi-label">Tensiones</div><div class="kpi-value" id="kTension" style="font-size:18px">—</div><div class="kpi-sub">mín – máx (p.u.)</div></div>
+  <div class="kpi"><div class="kpi-label">Estado</div><div class="kpi-value" id="kEstado">—</div><div class="kpi-sub" id="kEstadoSub">límites reales</div></div>
+</div>
+
+<div class="layout">
+  <aside>
+    <div>
+      <div class="ctl-title">Demanda del sistema</div>
+      <div class="ctl-row"><span>Factor de demanda</span><span class="v" id="fdVal">—</span></div>
+      <input type="range" id="fd"/>
+      <div class="ctl-row"><span>Perfil de cargas</span><span class="perfil" id="perfilLbl">uniforme</span></div>
+      <div class="btn-row">
+        <button class="btn" id="btnPerfil">Perfil aleatorio</button>
+        <button class="btn" id="btnUniforme">Uniforme</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="ctl-title">Precio de oferta (USD/MWh)</div>
+      <div id="precios"></div>
+    </div>
+
+    <div>
+      <div class="ctl-title">Comparar con</div>
+      <label class="toggle"><input type="checkbox" id="chkOpf"/> OPF AC exacto (pandapower)</label>
+      <label class="toggle"><input type="checkbox" id="chkMerito" checked/> Orden de mérito sin red</label>
+      <p class="hint">El OPF tarda ~0.3 s; el agente responde en milisegundos.</p>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn" id="btnAleatorio">Escenario aleatorio</button>
+      <button class="btn orange" id="btnDia">Simular 24 h</button>
+    </div>
+    <p class="hint">Cada cambio en los controles es un escenario nuevo: el agente despacha y
+      pandapower resuelve el flujo de carga AC con ese despacho.</p>
+  </aside>
+
+  <main>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Despacho por generador</div>
+        <span class="panel-badge" id="badgeDespacho">—</span>
+      </div>
+      <div class="chart-wrap"><canvas id="cDespacho"></canvas></div>
+      <div style="overflow-x:auto"><table class="gen">
+        <thead><tr><th>Generador</th><th>Precio</th><th>P (MW)</th><th>Q (MVAr)</th><th>V (p.u.)</th><th>USD/h</th></tr></thead>
+        <tbody id="tGen"></tbody>
+      </table></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Red — cargabilidad y tensiones</div>
+        <span class="panel-badge" id="badgeRed">—</span>
+      </div>
+      <canvas id="red"></canvas>
+      <div class="legend">
+        <span><i style="background:var(--green)"></i>&lt; 70 %</span>
+        <span><i style="background:var(--orange)"></i>70–98 %</span>
+        <span><i style="background:var(--red)"></i>&gt; 98 %</span>
+        <span>● barra (color = tensión)</span><span>■ generador</span>
+      </div>
+    </div>
+
+    <div class="panel wide">
+      <div class="panel-header">
+        <div class="panel-title">Cargabilidad de ramas (%)</div>
+        <span class="panel-badge" id="badgeCarga">—</span>
+      </div>
+      <div class="chart-wrap" style="height:230px"><canvas id="cCarga"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Tensión en barras (p.u.)</div>
+        <span class="panel-badge" id="badgeTension">—</span>
+      </div>
+      <div class="chart-wrap"><canvas id="cTension"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Reactiva de generadores vs límites</div>
+        <span class="panel-badge" id="badgeQ">—</span>
+      </div>
+      <div class="chart-wrap"><canvas id="cQ"></canvas></div>
+    </div>
+
+    <div class="panel wide" id="panelDia">
+      <div class="panel-header">
+        <div class="panel-title">Simulación de 24 horas</div>
+        <span class="panel-badge" id="badgeDia">—</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px">
+        <div class="chart-wrap"><canvas id="cDiaCosto"></canvas></div>
+        <div class="chart-wrap"><canvas id="cDiaCarga"></canvas></div>
+        <div class="chart-wrap"><canvas id="cDiaDespacho"></canvas></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Estado de los controles y datos estáticos de la red
+// ---------------------------------------------------------------------------
+const C = { blue:'#00B4D8', green:'#06D6A0', orange:'#FF9F1C', red:'#EF4444', violet:'#A78BFA',
+            muted:'#64748B', text:'#E2E8F0', grid:'rgba(100,116,139,.15)' };
+const GEN_COLORS = ['#00B4D8','#06D6A0','#FF9F1C','#A78BFA','#F472B6','#FACC15','#38BDF8','#4ADE80','#FB7185','#C084FC'];
+let INFO = null;
+const estado = { fd: 0.75, precios: [], perfil: 'uniforme', opf: false, merito: true };
+let ultimo = null;
+
+Chart.defaults.color = C.muted;
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 10;
+Chart.defaults.borderColor = C.grid;
+
+const $ = id => document.getElementById(id);
+const fmt = (x, d=1) => (x === null || x === undefined || Number.isNaN(x)) ? '—' : Number(x).toFixed(d);
+
+function mostrarError(msg) {
+  const b = $('errorBar');
+  if (msg) { b.textContent = msg; b.style.display = 'block'; } else { b.style.display = 'none'; }
+}
+
+// Línea horizontal constante como dataset (evita depender de plugins).
+const lineaH = (label, valor, n, color, dash=[5,4]) => ({
+  type:'line', label, data:Array(n).fill(valor), borderColor:color, borderWidth:1.2,
+  borderDash:dash, pointRadius:0, fill:false, order:0 });
+
+// ---------------------------------------------------------------------------
+// Gráficas (se crean una vez y luego solo se actualizan los datos)
+// ---------------------------------------------------------------------------
+let chDespacho, chCarga, chTension, chQ, chDiaCosto, chDiaCarga, chDiaDespacho;
+
+function crearGraficas() {
+  const G = INFO.generadores.map(n => n.split(' ')[0]);
+  const nG = G.length, nR = INFO.ramas.length, nB = INFO.n_barras;
+  const opts = (extra={}) => Object.assign({ responsive:true, maintainAspectRatio:false, animation:{duration:250},
+    plugins:{ legend:{ labels:{ boxWidth:10 } } } }, extra);
+
+  chDespacho = new Chart($('cDespacho'), { type:'bar', data:{ labels:G, datasets:[
+      { label:'Agente PPO', data:[], backgroundColor:C.blue, order:2 },
+      { label:'OPF exacto', data:[], backgroundColor:C.green, order:2, hidden:true },
+      { label:'Mérito sin red', data:[], backgroundColor:'rgba(239,68,68,.55)', order:2 },
+      { type:'line', label:'Pmax', data:INFO.p_max, borderColor:C.muted, backgroundColor:C.muted,
+        showLine:false, pointStyle:'line', pointRadius:14, pointBorderWidth:2, order:1 } ] },
+    options: opts({ scales:{ y:{ title:{display:true, text:'MW'} } } }) });
+
+  chCarga = new Chart($('cCarga'), { type:'bar', data:{ labels:INFO.ramas.map(r => r.split(' ')[0]), datasets:[
+      { label:'Agente PPO', data:[], backgroundColor:[], order:2 },
+      { label:'Mérito sin red', data:[], type:'line', borderColor:'rgba(239,68,68,.6)', backgroundColor:'rgba(239,68,68,.6)',
+        showLine:false, pointRadius:3, order:1 },
+      lineaH('Límite 100 %', INFO.carga_max, nR, C.red),
+      lineaH(`Margen de entrenamiento ${INFO.carga_max - INFO.margen_carga} %`, INFO.carga_max - INFO.margen_carga, nR, C.orange, [2,3]) ] },
+    options: opts({ scales:{ y:{ min:0, title:{display:true, text:'%'} }, x:{ ticks:{ autoSkip:true, maxRotation:0 } } } }) });
+
+  const barras = Array.from({length:nB}, (_, i) => 'B' + (i+1));
+  chTension = new Chart($('cTension'), { type:'bar', data:{ labels:barras, datasets:[
+      { label:'Agente PPO', data:[], backgroundColor:[], order:2 },
+      lineaH('Vmín', INFO.v_min, nB, C.red), lineaH('Vmáx', INFO.v_max, nB, C.orange) ] },
+    options: opts({ scales:{ y:{ min:0.92, max:1.08, title:{display:true, text:'p.u.'} },
+                             x:{ ticks:{ autoSkip:true, maxRotation:0 } } } }) });
+
+  chQ = new Chart($('cQ'), { type:'bar', data:{ labels:G, datasets:[
+      { label:'Rango permitido [Qmín, Qmáx]', data:INFO.q_min.map((q,i) => [q, INFO.q_max[i]]),
+        backgroundColor:'rgba(100,116,139,.25)', borderColor:'rgba(100,116,139,.5)', borderWidth:1, order:2 },
+      { type:'line', label:'Q agente', data:[], showLine:false, pointRadius:6, pointStyle:'rectRot',
+        backgroundColor:[], borderColor:[], order:1 } ] },
+    options: opts({ scales:{ y:{ title:{display:true, text:'MVAr'} } } }) });
+
+  const H = Array.from({length:24}, (_, h) => h + 'h');
+  chDiaCosto = new Chart($('cDiaCosto'), { type:'line', data:{ labels:H, datasets:[
+      { label:'Agente PPO', data:[], borderColor:C.blue, backgroundColor:C.blue, tension:.25, pointRadius:2 },
+      { label:'OPF exacto', data:[], borderColor:C.green, backgroundColor:C.green, borderDash:[5,4], tension:.25, pointRadius:0 },
+      { label:'Mérito sin red', data:[], borderColor:'rgba(239,68,68,.6)', backgroundColor:'rgba(239,68,68,.6)', tension:.25, pointRadius:0 } ] },
+    options: opts({ plugins:{ title:{display:true, text:'Costo horario (USD/h)', color:C.text} } }) });
+  chDiaCarga = new Chart($('cDiaCarga'), { type:'line', data:{ labels:H, datasets:[
+      { label:'Agente PPO', data:[], borderColor:C.blue, backgroundColor:C.blue, tension:.25, pointRadius:2 },
+      { label:'Mérito sin red', data:[], borderColor:'rgba(239,68,68,.6)', backgroundColor:'rgba(239,68,68,.6)', tension:.25, pointRadius:0 },
+      lineaH('Límite', INFO.carga_max, 24, C.red) ] },
+    options: opts({ plugins:{ title:{display:true, text:'Cargabilidad máxima (%)', color:C.text} } }) });
+  chDiaDespacho = new Chart($('cDiaDespacho'), { type:'bar', data:{ labels:H,
+      datasets: G.map((g, i) => ({ label:g, data:[], backgroundColor:GEN_COLORS[i % GEN_COLORS.length], stack:'p' })) },
+    options: opts({ scales:{ x:{ stacked:true }, y:{ stacked:true, title:{display:true, text:'MW'} } },
+                    plugins:{ title:{display:true, text:'Despacho del agente por hora', color:C.text}, legend:{ labels:{ boxWidth:8 } } } }) });
+}
+
+const colorCarga = c => c > INFO.carga_max - INFO.margen_carga ? C.red : (c > 70 ? C.orange : C.green);
+const colorTension = v => v < INFO.v_min ? C.red : (v > INFO.v_max ? C.orange : C.blue);
+
+// ---------------------------------------------------------------------------
+// Diagrama de la red (canvas)
+// ---------------------------------------------------------------------------
+function dibujarRed(res) {
+  const cv = $('red'), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, Hh = cv.clientHeight;
+  cv.width = W * dpr; cv.height = Hh * dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, Hh);
+  const xy = INFO.coordenadas, pad = 26;
+  const xs = xy.map(p => p[0]), ys = xy.map(p => p[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const esc = Math.min((W - 2*pad) / (x1 - x0 || 1), (Hh - 2*pad) / (y1 - y0 || 1));
+  const ox = (W - esc * (x1 - x0)) / 2, oy = (Hh - esc * (y1 - y0)) / 2;
+  const P = i => [ox + (xy[i][0] - x0) * esc, Hh - (oy + (xy[i][1] - y0) * esc)];
+
+  INFO.extremos_ramas.forEach(([a, b], k) => {
+    const c = res ? res.cargabilidad[k] : 0;
+    const [xa, ya] = P(a), [xb, yb] = P(b);
+    ctx.strokeStyle = res ? colorCarga(c) : C.muted;
+    ctx.lineWidth = res ? 1.5 + 3 * Math.min(c, 120) / 120 : 1.5;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(xb, yb); ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+  for (let i = 0; i < INFO.n_barras; i++) {
+    const [x, y] = P(i);
+    ctx.fillStyle = res ? colorTension(res.vm[i]) : C.muted;
+    ctx.beginPath(); ctx.arc(x, y, 4.5, 0, 2 * Math.PI); ctx.fill();
+  }
+  ctx.font = "10px 'JetBrains Mono', monospace";
+  INFO.bus_gen.forEach((b, g) => {
+    const [x, y] = P(b);
+    const lado = res ? 8 + 10 * Math.max(0, res.p_gen[g]) / Math.max(...INFO.p_max) : 10;
+    ctx.strokeStyle = GEN_COLORS[g % GEN_COLORS.length]; ctx.lineWidth = 2;
+    ctx.strokeRect(x - lado/2, y - lado/2, lado, lado);
+    ctx.fillStyle = C.text;
+    ctx.fillText(`G${g+1}${res ? ' ' + fmt(res.p_gen[g], 0) + 'MW' : ''}`, x + lado/2 + 3, y - lado/2);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Controles
+// ---------------------------------------------------------------------------
+function construirControles() {
+  const fd = $('fd');
+  fd.min = INFO.fd_min; fd.max = INFO.fd_max; fd.step = 0.005; fd.value = estado.fd;
+  fd.oninput = () => { estado.fd = parseFloat(fd.value); actualizarEtiquetas(); programarDespacho(); };
+
+  const cont = $('precios'); cont.innerHTML = '';
+  const defecto = INFO.generadores.map((_, i) => Math.round(INFO.precio_min + (INFO.precio_max - INFO.precio_min) * ((i * 0.37 + 0.15) % 1)));
+  estado.precios = defecto;
+  INFO.generadores.forEach((nombre, i) => {
+    const row = document.createElement('div'); row.className = 'price-row';
+    row.innerHTML = `<div class="ctl-row"><span style="color:${GEN_COLORS[i % GEN_COLORS.length]}">${nombre}</span>
+      <span class="v" id="pv${i}" style="color:var(--orange)"></span></div>
+      <input type="range" id="p${i}" min="${INFO.precio_min}" max="${INFO.precio_max}" step="0.5" value="${estado.precios[i]}"/>`;
+    cont.appendChild(row);
+    $('p' + i).oninput = e => { estado.precios[i] = parseFloat(e.target.value); actualizarEtiquetas(); programarDespacho(); };
+  });
+
+  $('chkOpf').onchange = e => { estado.opf = e.target.checked; chDespacho.data.datasets[1].hidden = !estado.opf; despachar(); };
+  $('chkMerito').onchange = e => { estado.merito = e.target.checked; despachar(); };
+  $('btnPerfil').onclick = () => { estado.perfil = Math.floor(Math.random() * 1e6); actualizarEtiquetas(); despachar(); };
+  $('btnUniforme').onclick = () => { estado.perfil = 'uniforme'; actualizarEtiquetas(); despachar(); };
+  $('btnAleatorio').onclick = async () => {
+    const r = await (await fetch('/api/aleatorio')).json();
+    estado.fd = r.fd; estado.precios = r.precios; estado.perfil = r.perfil;
+    $('fd').value = r.fd; r.precios.forEach((p, i) => $('p' + i).value = p);
+    actualizarEtiquetas(); despachar();
+  };
+  $('btnDia').onclick = simularDia;
+  actualizarEtiquetas();
+}
+
+function actualizarEtiquetas() {
+  $('fdVal').textContent = `${estado.fd.toFixed(3)}  (${(estado.fd * INFO.demanda_base_mw).toFixed(1)} MW)`;
+  estado.precios.forEach((p, i) => $('pv' + i).textContent = Number(p).toFixed(1));
+  $('perfilLbl').textContent = estado.perfil === 'uniforme' ? 'uniforme' : 'aleatorio #' + estado.perfil;
+}
+
+// ---------------------------------------------------------------------------
+// Despacho
+// ---------------------------------------------------------------------------
+let temporizador = null;
+function programarDespacho() { clearTimeout(temporizador); temporizador = setTimeout(despachar, 120); }
+
+async function despachar() {
+  const t0 = performance.now();
+  try {
+    const resp = await fetch('/api/despachar', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ fd:estado.fd, precios:estado.precios, perfil:estado.perfil,
+                             comparar_opf:estado.opf, comparar_merito:estado.merito }) });
+    const d = await resp.json();
+    if (!resp.ok) { mostrarError(d.error || 'Error del servidor'); $('statusDot').className = 'status-dot err'; return; }
+    mostrarError(null); $('statusDot').className = 'status-dot ok';
+    ultimo = d; pintar(d);
+    $('tiempoLbl').textContent = `respuesta ${Math.round(performance.now() - t0)} ms`;
+  } catch (e) { mostrarError('No hay conexión con el servidor: ' + e); $('statusDot').className = 'status-dot err'; }
+}
+
+function pintar(d) {
+  const a = d.agente;
+  $('kDemanda').textContent = fmt(d.demanda_mw, 1);
+  $('kDemandaSub').textContent = `MW · FD ${fmt(d.fd, 3)}`;
+  if (!a.convergio) {
+    $('kEstado').textContent = 'NO CONVERGE'; $('kEstado').className = 'kpi-value bad'; return;
+  }
+  $('kCosto').textContent = fmt(a.costo, 0);
+  const cmax = Math.max(...a.cargabilidad);
+  $('kCarga').textContent = fmt(cmax, 1) + '%';
+  $('kCarga').className = 'kpi-value ' + (cmax > INFO.carga_max ? 'bad' : (cmax > 90 ? 'warn' : 'good'));
+  $('kCargaSub').textContent = INFO.ramas[a.cargabilidad.indexOf(cmax)];
+  const vmin = Math.min(...a.vm), vmax = Math.max(...a.vm);
+  $('kTension').textContent = `${fmt(vmin, 3)} – ${fmt(vmax, 3)}`;
+  $('kTension').className = 'kpi-value ' + ((vmin < INFO.v_min || vmax > INFO.v_max) ? 'bad' : 'good');
+  $('kEstado').textContent = a.seguro ? 'SEGURO' : 'INSEGURO';
+  $('kEstado').className = 'kpi-value ' + (a.seguro ? 'good' : 'bad');
+  const v = a.violaciones;
+  $('kEstadoSub').textContent = a.seguro ? 'sin violaciones' :
+    [v.n_ramas_sobrecargadas ? v.n_ramas_sobrecargadas + ' ramas' : '', v.n_barras_fuera_banda ? v.n_barras_fuera_banda + ' barras' : '',
+     v.exceso_slack_mw > 0.01 ? 'slack' : '', v.n_gen_fuera_q ? v.n_gen_fuera_q + ' gen Q' : ''].filter(Boolean).join(' · ');
+
+  if (d.opf && d.opf.convergio && d.brecha_opf_pct !== undefined) {
+    $('kBrecha').textContent = (d.brecha_opf_pct >= 0 ? '+' : '') + fmt(d.brecha_opf_pct, 2) + '%';
+    $('kBrecha').className = 'kpi-value ' + (d.brecha_opf_pct < 3 ? 'good' : (d.brecha_opf_pct < 8 ? 'warn' : 'bad'));
+    $('kBrechaSub').textContent = `OPF: ${fmt(d.opf.costo, 0)} USD/h`;
+  } else if (d.opf && !d.opf.convergio) {
+    $('kBrecha').textContent = 'N/A'; $('kBrecha').className = 'kpi-value warn'; $('kBrechaSub').textContent = 'OPF sin solución';
+  } else {
+    $('kBrecha').textContent = '—'; $('kBrecha').className = 'kpi-value'; $('kBrechaSub').textContent = 'active la comparación';
+  }
+
+  // Despacho
+  chDespacho.data.datasets[0].data = a.p_gen;
+  chDespacho.data.datasets[1].data = (d.opf && d.opf.convergio) ? d.opf.p_gen : [];
+  chDespacho.data.datasets[2].data = (d.merito && d.merito.convergio) ? d.merito.p_gen : [];
+  chDespacho.data.datasets[2].hidden = !estado.merito;
+  chDespacho.update();
+  $('badgeDespacho').textContent = `pérdidas ${fmt(a.perdidas, 2)} MW · ${fmt(a.sobrecosto_merito_pct, 1)}% sobre mérito`;
+  $('tGen').innerHTML = INFO.generadores.map((n, i) => {
+    const q = a.q_gen[i], qmal = q > INFO.q_max[i] + 0.01 || q < INFO.q_min[i] - 0.01;
+    const pmal = i === 0 && (a.p_gen[0] > INFO.p_max[0] + 0.01 || a.p_gen[0] < INFO.p_min[0] - 0.01);
+    return `<tr><td style="color:${GEN_COLORS[i % GEN_COLORS.length]}">${n}</td><td>${fmt(estado.precios[i], 1)}</td>
+      <td class="${pmal ? 'bad' : ''}">${fmt(a.p_gen[i], 2)}</td><td class="${qmal ? 'bad' : ''}">${fmt(q, 2)}</td>
+      <td>${fmt(a.v_gen[i], 4)}</td><td>${fmt(a.p_gen[i] * estado.precios[i], 0)}</td></tr>`;
+  }).join('');
+
+  // Cargabilidad
+  chCarga.data.datasets[0].data = a.cargabilidad;
+  chCarga.data.datasets[0].backgroundColor = a.cargabilidad.map(colorCarga);
+  chCarga.data.datasets[1].data = (estado.merito && d.merito && d.merito.convergio) ? d.merito.cargabilidad : [];
+  chCarga.update();
+  const nSob = a.cargabilidad.filter(c => c > INFO.carga_max).length;
+  $('badgeCarga').textContent = `máx ${fmt(cmax, 1)}% · ${nSob} sobrecargadas` +
+    ((estado.merito && d.merito && d.merito.convergio) ? ` · mérito sin red: máx ${fmt(Math.max(...d.merito.cargabilidad), 0)}%` : '');
+
+  // Tensiones
+  chTension.data.datasets[0].data = a.vm;
+  chTension.data.datasets[0].backgroundColor = a.vm.map(colorTension);
+  chTension.update();
+  $('badgeTension').textContent = `${fmt(vmin, 3)} – ${fmt(vmax, 3)} p.u.`;
+
+  // Reactiva
+  chQ.data.datasets[1].data = a.q_gen;
+  const qcol = a.q_gen.map((q, i) => (q > INFO.q_max[i] + 0.01 || q < INFO.q_min[i] - 0.01) ? C.red : C.blue);
+  chQ.data.datasets[1].backgroundColor = qcol; chQ.data.datasets[1].borderColor = qcol;
+  chQ.update();
+  $('badgeQ').textContent = v.n_gen_fuera_q ? `${v.n_gen_fuera_q} fuera de límites` : 'todas dentro de límites';
+
+  $('badgeRed').textContent = `${a.seguro ? 'segura' : 'con violaciones'} · ${nSob} ramas > 100%`;
+  dibujarRed(a);
+}
+
+// ---------------------------------------------------------------------------
+// Simulación de 24 h
+// ---------------------------------------------------------------------------
+async function simularDia() {
+  const b = $('btnDia'); b.disabled = true; b.textContent = 'Simulando 24 h (OPF incluido)...';
+  try {
+    const resp = await fetch('/api/simular_dia', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ precios:estado.precios, perfil:estado.perfil, comparar_opf:true }) });
+    const d = await resp.json();
+    if (!resp.ok) { mostrarError(d.error); return; }
+    const H = d.horas;
+    $('panelDia').style.display = 'block';
+    chDiaCosto.data.datasets[0].data = H.map(h => h.agente.costo);
+    chDiaCosto.data.datasets[1].data = H.map(h => h.opf_costo);
+    chDiaCosto.data.datasets[2].data = H.map(h => h.merito.costo);
+    chDiaCosto.update();
+    chDiaCarga.data.datasets[0].data = H.map(h => h.agente.convergio ? Math.max(...h.agente.cargabilidad) : null);
+    chDiaCarga.data.datasets[1].data = H.map(h => h.merito.carga_max);
+    chDiaCarga.update();
+    chDiaDespacho.data.datasets.forEach((ds, g) => ds.data = H.map(h => h.agente.convergio ? Math.max(0, h.agente.p_gen[g]) : 0));
+    chDiaDespacho.update();
+    const seguras = H.filter(h => h.agente.seguro).length;
+    const ca = H.reduce((s, h) => s + (h.agente.costo || 0), 0);
+    const validas = H.filter(h => h.opf_costo !== null);
+    const brecha = validas.length ? 100 * (validas.reduce((s, h) => s + h.agente.costo, 0) /
+                                           validas.reduce((s, h) => s + h.opf_costo, 0) - 1) : NaN;
+    const segM = H.filter(h => h.merito.seguro).length;
+    $('badgeDia').textContent = `agente seguro ${seguras}/24 h · costo día ${fmt(ca / 1000, 1)} kUSD · brecha vs OPF ${fmt(brecha, 2)}% · mérito sin red seguro ${segM}/24 h`;
+    $('panelDia').scrollIntoView({ behavior:'smooth' });
+  } finally { b.disabled = false; b.textContent = 'Simular 24 h'; }
+}
+
+// ---------------------------------------------------------------------------
+// Arranque
+// ---------------------------------------------------------------------------
+(async () => {
+  try {
+    INFO = await (await fetch('/api/info')).json();
+  } catch (e) { mostrarError('No se pudo conectar con el servidor.'); return; }
+  $('subtitulo').textContent = `Despacho económico seguro · ${INFO.caso} · ${INFO.generadores.length} generadores · pandapower`;
+  if (!INFO.modelo_cargado) { mostrarError(INFO.error_modelo); $('statusDot').className = 'status-dot err'; }
+  crearGraficas(); construirControles(); dibujarRed(null);
+  window.addEventListener('resize', () => dibujarRed(ultimo ? ultimo.agente : null));
+  if (INFO.modelo_cargado) despachar();
+})();
+</script>
+</body>
+</html>
